@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Personal Budget Calculator with Express, sql.js, Excel/CSV import and dashboard analytics.",
   "scripts": {
-    "build": "echo 'Static build ready'",
     "start": "node server.js"
   },
   "dependencies": {
