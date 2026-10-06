@@ -1,0 +1,12 @@
+Month,Category,Type,Amount
+January,Salary,Income,50000
+January,Rental Income,Income,8000
+January,Rent/Housing,Expense,12000
+January,Food/Groceries,Expense,6000
+January,Transportation,Expense,3000
+January,Mutual Funds,Investment,5000
+February,Salary,Income,50000
+February,Rent/Housing,Expense,12000
+February,Food/Groceries,Expense,5500
+February,Transportation,Expense,2800
+February,Mutual Funds,Investment,5000

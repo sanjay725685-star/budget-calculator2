@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Budget Calculator</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="loader" class="loader hidden"><div class="spinner"></div><span>Working...</span></div>
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">FINVERSE • PERSONAL FINANCE</p>
+      <h1>Personal Budget Calculator</h1>
+      <p class="subtitle">Track income, expenses, savings and investments in one place.</p>
+    </div>
+    <div class="header-actions">
+      <button id="recordsBtn" class="btn secondary">📋 All Records</button>
+      <button id="themeBtn" class="btn secondary">🌙 Dark Mode</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="progress-wrap">
+      <div class="progress-head"><span id="stepLabel">Step 1 of 5</span><span id="draftStatus">Draft ready</span></div>
+      <div class="progress"><div id="progressBar"></div></div>
+    </div>
+
+    <section class="step active" data-step="1">
+      <div class="section-title"><span class="icon">👤</span><div><h2>Demographic Details</h2><p>Tell us a little about the household.</p></div></div>
+      <div class="grid two">
+        <label>User Name<input id="user_name" placeholder="Enter your full name" required></label>
+        <label>Age<input id="age" type="number" min="1" max="120" placeholder="Enter your age" required></label>
+        <label>Occupation<select id="occupation"><option value="">Select Occupation</option><option>Business</option><option>Private Sector</option><option>Public Sector</option><option>Others</option></select></label>
+        <label>No. of Family Members<input id="family_members" type="number" min="1" step="1" placeholder="Enter family members" required></label>
+        <label>No. of Earning Members<input id="earning_members" type="number" min="1" step="1" placeholder="Enter earning members" required></label>
+        <label>Income Earned From Other Family Members (₹)<input id="other_family_income" class="money" type="number" min="0" step="0.01" placeholder="Enter monthly income"></label>
+      </div>
+      <div class="step-actions"><button class="btn primary next">Next →</button></div>
+    </section>
+
+    <section class="step" data-step="2">
+      <div class="section-title"><span class="icon">💰</span><div><h2>Income Details</h2><p>Add your monthly income sources.</p></div></div>
+      <div class="import-banner"><div><strong>📊 Import existing Excel/CSV</strong><span>Auto-fill income, expense and savings rows from a file.</span></div><button id="importBtn" class="btn primary">Import File</button><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" hidden></div>
+      <div class="rows-head"><span>Income Source</span><span>Monthly Amount (₹)</span><span></span></div>
+      <div id="incomeRows"></div>
+      <button id="addIncome" class="btn secondary">+ Add Income Source</button>
+      <div class="total-card"><span>Total Monthly Income</span><strong id="totalIncome">₹0</strong></div>
+      <div class="step-actions"><button class="btn secondary back">← Back</button><button class="btn primary next">Next →</button></div>
+    </section>
+
+    <section class="step" data-step="3">
+      <div class="section-title"><span class="icon">🧾</span><div><h2>Expense Details</h2><p>Track your monthly spending categories.</p></div></div>
+      <div class="rows-head"><span>Expense Category</span><span>Monthly Amount (₹)</span><span></span></div>
+      <div id="expenseRows"></div>
+      <button id="addExpense" class="btn secondary">+ Add Expense</button>
+      <div class="total-card"><span>Total Monthly Expenses</span><strong id="totalExpenses">₹0</strong></div>
+      <div class="step-actions"><button class="btn secondary back">← Back</button><button class="btn primary next">Next →</button></div>
+    </section>
+
+    <section class="step" data-step="4">
+      <div class="section-title"><span class="icon">📈</span><div><h2>Current Savings & Investments</h2><p>Record your current financial assets.</p></div></div>
+      <div class="rows-head"><span>Savings / Investment Source</span><span>Current Amount (₹)</span><span></span></div>
+      <div id="savingsRows"></div>
+      <button id="addSavings" class="btn secondary">+ Add Source</button>
+      <div class="total-card"><span>Total Current Savings & Investments</span><strong id="totalCurrentSavings">₹0</strong></div>
+      <div class="step-actions"><button class="btn secondary back">← Back</button><button id="calculateBtn" class="btn primary">Calculate Budget →</button></div>
+    </section>
+
+    <section class="step" data-step="5">
+      <div class="section-title"><span class="icon">📊</span><div><h2>Budget Summary & Assessment</h2><p>Review your current financial picture.</p></div></div>
+      <div class="kpis">
+        <div class="kpi"><span>Total Monthly Income</span><strong id="kpiIncome">₹0</strong></div>
+        <div class="kpi"><span>Total Monthly Expenses</span><strong id="kpiExpenses">₹0</strong></div>
+        <div class="kpi"><span>Monthly Savings</span><strong id="kpiSavings">₹0</strong></div>
+        <div class="kpi"><span>Current Savings/Investments</span><strong id="kpiCurrentSavings">₹0</strong></div>
+        <div class="kpi"><span>Savings Rate</span><strong id="kpiSavingsRate">0%</strong></div>
+        <div class="kpi"><span>Expense-to-Income Ratio</span><strong id="kpiExpenseRatio">0%</strong></div>
+      </div>
+      <div class="summary-grid">
+        <div class="card"><h3>Expenses vs Savings</h3><div class="splitbar"><div id="expenseBar"></div><div id="savingBar"></div></div><div class="legend"><span>Expenses <b id="expensePct">0%</b></span><span>Savings <b id="savingPct">0%</b></span></div></div>
+        <div class="card"><h3>Budget Assessment</h3><div id="assessment" class="assessment">Calculate your budget to see the assessment.</div><ul id="tips"></ul></div>
+      </div>
+      <div id="warningBox" class="warning hidden"></div>
+      <div class="card insights"><h3>💡 Financial Insights</h3><div id="insightsText">Your insights will appear here.</div></div>
+      <div class="step-actions"><button class="btn secondary back">← Back</button><button id="saveBtn" class="btn primary">💾 Save Record</button><button id="resetBtn" class="btn danger">Reset</button></div>
+    </section>
+
+    <section class="dashboard-section">
+      <div class="section-title"><span class="icon">📅</span><div><h2>12-Month Budget Dashboard</h2><p>FinVerse-style yearly budget: entries → subtotals → ratios → savings story.</p></div></div>
+      <div class="year-controls">
+        <select id="yearMonth"><option value="January">January</option><option>February</option><option>March</option><option>April</option><option>May</option><option>June</option><option>July</option><option>August</option><option>September</option><option>October</option><option>November</option><option>December</option></select>
+        <button id="saveYearData" class="btn secondary">Save Month Data</button>
+      </div>
+      <div class="year-kpis">
+        <div class="kpi"><span>Annual Income</span><strong id="annualIncome">₹0</strong></div>
+        <div class="kpi"><span>Annual Expenses</span><strong id="annualExpenses">₹0</strong></div>
+        <div class="kpi"><span>Annual Surplus</span><strong id="annualSurplus">₹0</strong></div>
+        <div class="kpi"><span>Annual Savings Rate</span><strong id="annualSavingsRate">0%</strong></div>
+      </div>
+      <div class="year-entry card">
+        <h3 id="yearEntryTitle">January</h3>
+        <div class="grid two">
+          <label>Monthly Income (₹)<input id="yearIncome" type="number" min="0"></label>
+          <label>Monthly Expenses (₹)<input id="yearExpense" type="number" min="0"></label>
+          <label>Investment (₹)<input id="yearInvestment" type="number" min="0"></label>
+          <label>Uninvested Surplus (auto)<input id="yearUninvested" type="text" readonly></label>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="chart-card"><h3>Income vs Expenses Trend</h3><canvas id="incomeExpenseChart"></canvas></div>
+        <div class="chart-card"><h3>Expense Category Breakdown</h3><canvas id="expenseChart"></canvas></div>
+        <div class="chart-card"><h3>Savings Rate Over Time</h3><canvas id="savingsRateChart"></canvas></div>
+        <div class="chart-card"><h3>Expenses as % of Income</h3><canvas id="expenseRatioChart"></canvas></div>
+        <div class="chart-card"><h3>Top 5 Expense Categories</h3><canvas id="topExpenseChart"></canvas></div>
+        <div class="chart-card"><h3>Investment vs Uninvested Surplus</h3><canvas id="investmentChart"></canvas></div>
+      </div>
+      <div class="table-wrap card"><h3>Yearly Budget Summary</h3><table id="yearTable"></table></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="recordsModal" class="modal hidden">
+    <div class="modal-box wide"><div class="modal-head"><h2>📋 All Records</h2><button class="close" data-close="recordsModal">×</button></div><div id="recordsContent"></div></div>
+  </div>
+
+  <div id="detailModal" class="modal hidden">
+    <div class="modal-box wide"><div class="modal-head"><h2>Record Details</h2><button class="close" data-close="detailModal">×</button></div><div id="detailContent"></div></div>
+  </div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-box small"><div class="modal-head"><h2>Confirm</h2><button class="close" data-close="confirmModal">×</button></div><p id="confirmText"></p><div class="modal-actions"><button id="confirmCancel" class="btn secondary">Cancel</button><button id="confirmOk" class="btn danger">Confirm</button></div></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
