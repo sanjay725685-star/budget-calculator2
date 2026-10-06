@@ -366,12 +366,17 @@ app.get("*", (req, res) => {
 module.exports = app;
 
 (async () => {
-  const SQL = await initSqlJs({
-    locateFile: file => path.join(__dirname, "node_modules", "sql.js", "dist", file)
-  });
-  initDatabase(SQL);
-  app.listen(PORT, () => console.log(`Personal Budget App running at http://localhost:${PORT}`));
-})().catch(err => {
-  console.error("Server startup failed:", err);
-  process.exit(1);
-});
+  if (process.env.VERCEL) {
+    console.log("Running in Vercel serverless environment");
+    return;
+  }
+  try {
+    const SQL = await initSqlJs({
+      locateFile: file => path.join(__dirname, "node_modules", "sql.js", "dist", file)
+    });
+    initDatabase(SQL);
+    app.listen(PORT, () => console.log(`Personal Budget App running at http://localhost:${PORT}`));
+  } catch (err) {
+    console.error("Server startup error:", err);
+  }
+})();

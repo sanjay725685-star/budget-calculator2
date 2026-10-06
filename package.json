@@ -2,6 +2,7 @@
   "name": "personal-budget-calculator",
   "version": "1.0.0",
   "description": "Personal Budget Calculator with Express, sql.js, Excel/CSV import and dashboard analytics.",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
