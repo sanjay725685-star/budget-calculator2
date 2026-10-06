@@ -247,43 +247,124 @@ async function saveRecord(){
     const r=await fetch("/api/budget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const data=await r.json(); if(!r.ok) throw new Error(data.message||"Save failed");
     toast(`Record #${data.id} saved successfully.`); loadRecords();
-  }catch(e){toast(e.message,true)}finally{loader(false)}
+  }catch(e){
+    try {
+      const records = JSON.parse(localStorage.getItem("budgetRecords") || "[]");
+      const id = records.length ? Math.max(...records.map(x=>Number(x.id)||0)) + 1 : 1;
+      const rec = { ...payload, id, created_at: new Date().toISOString() };
+      records.unshift(rec);
+      localStorage.setItem("budgetRecords", JSON.stringify(records));
+      toast(`Record #${id} saved locally.`);
+      loadRecords();
+    } catch(err) {
+      toast("Could not save record: " + err.message, true);
+    }
+  }finally{loader(false)}
+}
+function processImportedData(parsed){
+  const replace=confirm(`Found ${parsed.count} usable rows. Press OK to replace current dynamic rows, or Cancel to merge them.`);
+  const addIncome=(parsed.incomeRows||[]).map(x=>({category:x.category,amount:x.amount,month:x.month}));
+  const addExpense=(parsed.expenseRows||[]).map(x=>({category:x.category,amount:x.amount,month:x.month}));
+  const addSavings=(parsed.savingsRows||[]).map(x=>({category:x.category,amount:x.amount,month:x.month}));
+  if(replace){state.income_rows=[];state.expense_rows=[];state.savings_rows=[]}
+  state.income_rows.push(...addIncome);state.expense_rows.push(...addExpense);state.savings_rows.push(...addSavings);
+  state.entry_type="excel";
+  addIncome.forEach(x=>{const m=x.month||"January";state.yearly_budget[m]??={income:0,expenses:0,investment:0};state.yearly_budget[m].income+=num(x.amount)});
+  addExpense.forEach(x=>{const m=x.month||"January";state.yearly_budget[m]??={income:0,expenses:0,investment:0};state.yearly_budget[m].expenses+=num(x.amount)});
+  addSavings.forEach(x=>{const m=x.month||"January";state.yearly_budget[m]??={income:0,expenses:0,investment:0};state.yearly_budget[m].investment+=num(x.amount)});
+  saveDraft();renderAll();toast(`Imported ${parsed.count} rows successfully.`);
 }
 async function importFile(file){
   if(!file)return;if(file.size>10*1024*1024){toast("File must be 10MB or smaller.",true);return}
-  const fd=new FormData();fd.append("file",file);loader(true,"Parsing Excel/CSV...");
+  const fd=new FormData();fd.append("file",file);loader(true,"Parsing file...");
   try{
-    const r=await fetch("/api/import-excel",{method:"POST",body:fd});const data=await r.json();if(!r.ok)throw new Error(data.message||"Import failed");
-    const parsed=data.data;
-    const replace=confirm(`Found ${parsed.count} usable rows. Press OK to replace current dynamic rows, or Cancel to merge them.`);
-    const addIncome=parsed.incomeRows.map(x=>({category:x.category,amount:x.amount,month:x.month}));
-    const addExpense=parsed.expenseRows.map(x=>({category:x.category,amount:x.amount,month:x.month}));
-    const addSavings=parsed.savingsRows.map(x=>({category:x.category,amount:x.amount,month:x.month}));
-    if(replace){state.income_rows=[];state.expense_rows=[];state.savings_rows=[]}
-    state.income_rows.push(...addIncome);state.expense_rows.push(...addExpense);state.savings_rows.push(...addSavings);
-    state.entry_type="excel";
-    addIncome.forEach(x=>{const m=x.month||"January";state.yearly_budget[m]??={income:0,expenses:0,investment:0};state.yearly_budget[m].income+=num(x.amount)});
-    addExpense.forEach(x=>{const m=x.month||"January";state.yearly_budget[m]??={income:0,expenses:0,investment:0};state.yearly_budget[m].expenses+=num(x.amount)});
-    addSavings.forEach(x=>{const m=x.month||"January";state.yearly_budget[m]??={income:0,expenses:0,investment:0};state.yearly_budget[m].investment+=num(x.amount)});
-    saveDraft();renderAll();toast(`Imported ${parsed.count} rows successfully.`);
-  }catch(e){toast(e.message,true)}finally{loader(false)}
+    const r=await fetch("/api/import-excel",{method:"POST",body:fd});
+    if(!r.ok) throw new Error();
+    const data=await r.json();
+    loader(false);
+    processImportedData(data.data);
+  }catch(e){
+    if(file.name.toLowerCase().endsWith(".csv")){
+      const reader=new FileReader();
+      reader.onload=evt=>{
+        try{
+          const lines=evt.target.result.split(/\r?\n/).filter(l=>l.trim());
+          const incomeRows=[], expenseRows=[], savingsRows=[];
+          for(let i=1;i<lines.length;i++){
+            const parts=lines[i].split(",").map(p=>p.trim().replace(/^["']|["']$/g,""));
+            if(parts.length>=4){
+              const [month, category, type, amountStr]=parts;
+              const amount=parseFloat(amountStr)||0;
+              const t=(type||"").toLowerCase();
+              if(t.includes("income")) incomeRows.push({category,amount,month});
+              else if(t.includes("expense")) expenseRows.push({category,amount,month});
+              else savingsRows.push({category,amount,month});
+            }
+          }
+          processImportedData({count:incomeRows.length+expenseRows.length+savingsRows.length,incomeRows,expenseRows,savingsRows});
+        }catch(err){toast("CSV parse failed: "+err.message,true)}
+        finally{loader(false)}
+      };
+      reader.readAsText(file);
+    }else{
+      loader(false);
+      toast("For static deployment, please upload .csv files (or run local Node server for .xlsx).",true);
+    }
+  }
+}
+function exportRecord(id){
+  fetch(`/api/budget/${id}`).then(r=>{
+    if(r.ok) window.location.href=`/api/export-excel/${id}`;
+    else throw new Error();
+  }).catch(()=>{
+    try{
+      const records=JSON.parse(localStorage.getItem("budgetRecords")||"[]");
+      const rec=records.find(x=>String(x.id)===String(id));
+      if(!rec) throw new Error("Record not found");
+      let csv="Type,Category/Source,Amount\n";
+      (rec.income_rows||[]).forEach(r=>{csv+=`Income,"${r.category||r.source||""}",${r.amount}\n`});
+      (rec.expense_rows||[]).forEach(r=>{csv+=`Expense,"${r.category||""}",${r.amount}\n`});
+      (rec.savings_rows||[]).forEach(r=>{csv+=`Savings,"${r.category||r.source||""}",${r.amount}\n`});
+      const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download=`budget-record-${rec.id}.csv`;
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast("Exported record as CSV.");
+    }catch(err){toast(err.message,true)}
+  });
 }
 async function loadRecords(){
+  let rows=[];
   try{
-    const r=await fetch("/api/budgets");const d=await r.json();if(!r.ok)throw new Error(d.message);
-    const rows=d.records||[];
-    $("recordsContent").innerHTML=rows.length?`<div class="table-wrap"><table class="record-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Date</th><th>Income</th><th>Expenses</th><th>Savings Rate</th><th>Assessment</th><th>Actions</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${x.id}</td><td>${escapeHtml(x.user_name)}</td><td><span class="badge">${x.entry_type==="excel"?"📊 Excel":"✏️ Manual"}</span></td><td>${new Date(x.created_at).toLocaleString()}</td><td>${currency(x.total_income)}</td><td>${currency(x.total_expenses)}</td><td>${pct(x.savings_rate)}</td><td>${escapeHtml(x.assessment)}</td><td><button class="btn secondary view" data-id="${x.id}">👁</button> <button class="btn secondary export" data-id="${x.id}">⬇</button> <button class="btn danger delete" data-id="${x.id}">🗑</button></td></tr>`).join("")}</tbody></table></div>`:"<p>No saved budget records yet.</p>";
-    $("recordsContent").querySelectorAll(".view").forEach(b=>b.onclick=()=>viewRecord(b.dataset.id));
-    $("recordsContent").querySelectorAll(".export").forEach(b=>b.onclick=()=>window.location.href=`/api/export-excel/${b.dataset.id}`);
-    $("recordsContent").querySelectorAll(".delete").forEach(b=>b.onclick=()=>confirmBox("Delete this saved record?",()=>deleteRecord(b.dataset.id)));
-  }catch(e){$("recordsContent").innerHTML="<p>Could not load records. Start the server and try again.</p>"}
+    const r=await fetch("/api/budgets");
+    if(!r.ok) throw new Error();
+    const d=await r.json();
+    rows=d.records||[];
+  }catch(e){
+    try{ rows=JSON.parse(localStorage.getItem("budgetRecords")||"[]"); }catch(err){ rows=[]; }
+  }
+  $("recordsContent").innerHTML=rows.length?`<div class="table-wrap"><table class="record-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Date</th><th>Income</th><th>Expenses</th><th>Savings Rate</th><th>Assessment</th><th>Actions</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${x.id}</td><td>${escapeHtml(x.user_name)}</td><td><span class="badge">${x.entry_type==="excel"?"📊 Excel":"✏️ Manual"}</span></td><td>${new Date(x.created_at).toLocaleString()}</td><td>${currency(x.total_income)}</td><td>${currency(x.total_expenses)}</td><td>${pct(x.savings_rate)}</td><td>${escapeHtml(x.assessment)}</td><td><button class="btn secondary view" data-id="${x.id}">👁</button> <button class="btn secondary export" data-id="${x.id}">⬇</button> <button class="btn danger delete" data-id="${x.id}">🗑</button></td></tr>`).join("")}</tbody></table></div>`:"<p>No saved budget records yet.</p>";
+  $("recordsContent").querySelectorAll(".view").forEach(b=>b.onclick=()=>viewRecord(b.dataset.id));
+  $("recordsContent").querySelectorAll(".export").forEach(b=>b.onclick=()=>exportRecord(b.dataset.id));
+  $("recordsContent").querySelectorAll(".delete").forEach(b=>b.onclick=()=>confirmBox("Delete this saved record?",()=>deleteRecord(b.dataset.id)));
 }
 async function viewRecord(id){
   loader(true,"Loading record...");
   try{
-    const r=await fetch(`/api/budget/${id}`),d=await r.json();if(!r.ok)throw new Error(d.message);
-    const x=d.record;
-    const rows=(arr)=>arr.map(r=>`<tr><td>${escapeHtml(r.category||r.source||"")}</td><td>${currency(r.amount)}</td></tr>`).join("");
+    let x;
+    try{
+      const r=await fetch(`/api/budget/${id}`);
+      if(!r.ok) throw new Error();
+      const d=await r.json();
+      x=d.record;
+    }catch(e){
+      const records=JSON.parse(localStorage.getItem("budgetRecords")||"[]");
+      x=records.find(r=>String(r.id)===String(id));
+    }
+    if(!x) throw new Error("Record not found");
+    const rows=(arr)=>(arr||[]).map(r=>`<tr><td>${escapeHtml(r.category||r.source||"")}</td><td>${currency(r.amount)}</td></tr>`).join("");
     $("detailContent").innerHTML=`
       <div class="detail-grid">
         <div class="detail-item"><small>Name</small><b>${escapeHtml(x.user_name)}</b></div>
@@ -302,7 +383,14 @@ async function viewRecord(id){
 }
 async function deleteRecord(id){
   try{
-    const r=await fetch(`/api/budget/${id}`,{method:"DELETE"}),d=await r.json();if(!r.ok)throw new Error(d.message);
+    try{
+      const r=await fetch(`/api/budget/${id}`,{method:"DELETE"});
+      if(!r.ok) throw new Error();
+    }catch(e){
+      let records=JSON.parse(localStorage.getItem("budgetRecords")||"[]");
+      records=records.filter(x=>String(x.id)!==String(id));
+      localStorage.setItem("budgetRecords",JSON.stringify(records));
+    }
     toast("Record deleted.");loadRecords();
   }catch(e){toast(e.message,true)}
 }

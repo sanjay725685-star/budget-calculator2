@@ -8,10 +8,14 @@ const initSqlJs = require("sql.js");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, "data");
+const DATA_DIR = process.env.VERCEL ? "/tmp" : path.join(ROOT, "data");
 const DB_FILE = path.join(DATA_DIR, "budget.sqlite");
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (e) {
+  console.warn("Could not create data dir:", e.message);
+}
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -358,6 +362,8 @@ app.get("/api/export-excel/:id", (req, res) => {
 app.get("*", (req, res) => {
   res.sendFile(path.join(ROOT, "index.html"));
 });
+
+module.exports = app;
 
 (async () => {
   const SQL = await initSqlJs({
